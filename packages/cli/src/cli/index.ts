@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import type { Octokit } from '@octokit/rest';
 import type {
   BenchmarkRunFailure,
+  Checker,
   CheckSummary,
   EnvironmentProxySettings,
   EventKind,
@@ -914,6 +915,10 @@ export async function shipIssue(
     localOnly?: LocalOnlyPolicy;
     /** Benchmark artifact directory (#509) — only set for local-only runs. */
     artifactsDir?: string;
+    /** Caller-supplied checkers appended to the CHECK registry (built-ins first;
+     *  extras cannot shadow a built-in). The seam for external composition roots
+     *  to add deterministic checkers without re-owning this orchestration. */
+    extraCheckers?: readonly Checker[];
   },
 ) {
   const repoRoot = ctx?.repoRoot ?? (await getRepoRoot());
@@ -1353,6 +1358,7 @@ export async function shipIssue(
       reworkRoute: build.route,
       reworkModel: build.model,
       laneId: lane,
+      extraCheckers: ctx?.extraCheckers,
     });
     checkSummary = check.summary;
     reworkRounds = check.reworkRounds;
