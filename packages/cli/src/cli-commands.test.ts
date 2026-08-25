@@ -120,6 +120,8 @@ vi.mock('@on-par/factory-core', async (importOriginal) => {
     resolveTimeouts: vi.fn(() => ({ plan: 1, build: 1, check: 1, approval: 1 })),
     resolveSkipCI: vi.fn(() => false),
     getConstitutionsDir: vi.fn(() => h.constitutionsDir),
+    // Repo-first resolution is unit-tested in core; CLI tests pin the harness dir.
+    resolveConstitutionsDir: vi.fn(() => h.constitutionsDir),
     resolveEffectiveModelPins: vi.fn(() => ({
       plan: h.modelOverrides.plan,
       planFallback: h.modelOverrides.planFallback,

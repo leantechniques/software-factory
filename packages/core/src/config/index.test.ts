@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -13,6 +13,7 @@ import {
   loadRoutesConfig,
   resolveAutoFailover,
   resolveBranchPrefix,
+  resolveConstitutionsDir,
   resolveDefectWindowDays,
   resolveEnvironmentPorts,
   resolveEnvironmentProxy,
@@ -75,6 +76,42 @@ describe('getFactoryPaths', () => {
     expect(paths.proxyState).toBe(resolve(repoRoot, '.factory', 'proxy.json'));
     expect(paths.breaker).toBe(resolve(repoRoot, '.factory', 'breaker.json'));
     expect(paths.reworkHistory).toBe(resolve(repoRoot, '.factory', 'rework-history.json'));
+    expect(paths.constitutions).toBe(resolve(repoRoot, '.factory', 'constitutions'));
+  });
+});
+
+describe('resolveConstitutionsDir', () => {
+  let tmpDir: string | undefined;
+
+  afterEach(async () => {
+    if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+    tmpDir = undefined;
+  });
+
+  it('prefers the repo .factory/constitutions dir when it exists', async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'constitutions-dir-'));
+    const repoDir = join(tmpDir, '.factory', 'constitutions');
+    await mkdir(repoDir, { recursive: true });
+
+    const dir = resolveConstitutionsDir(tmpDir, { FACTORY_CONSTITUTIONS_DIR: '/elsewhere' });
+
+    expect(dir).toBe(resolve(repoDir));
+  });
+
+  it('falls back to FACTORY_CONSTITUTIONS_DIR when the repo carries no constitutions dir', async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'constitutions-dir-'));
+
+    const dir = resolveConstitutionsDir(tmpDir, { FACTORY_CONSTITUTIONS_DIR: '/elsewhere' });
+
+    expect(dir).toBe('/elsewhere');
+  });
+
+  it('falls back to the packaged dir with no repo dir and no env override', async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'constitutions-dir-'));
+
+    expect(resolveConstitutionsDir(tmpDir, {})).toBe(getConstitutionsDir());
+    expect(resolveConstitutionsDir(undefined, {})).toBe(getConstitutionsDir());
+    expect(resolveConstitutionsDir(tmpDir, { FACTORY_CONSTITUTIONS_DIR: '   ' })).toBe(getConstitutionsDir());
   });
 });
 

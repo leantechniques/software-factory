@@ -492,6 +492,7 @@ export function getFactoryPaths(repoRoot: string) {
     config: resolve(state, 'config.json'),
     breaker: resolve(state, 'breaker.json'),
     reworkHistory: resolve(state, 'rework-history.json'),
+    constitutions: resolve(state, 'constitutions'),
   };
 }
 
@@ -499,4 +500,18 @@ export function getFactoryPaths(repoRoot: string) {
 
 export function getConstitutionsDir(): string {
   return resolveConfigPath('constitutions');
+}
+
+/** Repo-first constitution directory: the target repo's own `.factory/constitutions/`
+ *  wins when the directory exists (creating it is the opt-in), then an explicit
+ *  FACTORY_CONSTITUTIONS_DIR, then the packaged defaults. Lets an engagement carry
+ *  its own product constitutions without writing into the installed config package. */
+export function resolveConstitutionsDir(repoRoot?: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (repoRoot !== undefined) {
+    const repoDir = getFactoryPaths(repoRoot).constitutions;
+    if (existsSync(repoDir)) return repoDir;
+  }
+  const envDir = env.FACTORY_CONSTITUTIONS_DIR?.trim();
+  if (envDir) return envDir;
+  return getConstitutionsDir();
 }

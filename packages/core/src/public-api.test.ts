@@ -22,6 +22,7 @@ const PUBLIC_API_KEYS = [
   'loadModelsConfig',
   'loadRoutesConfig',
   'resolveAutoFailover',
+  'resolveConstitutionsDir',
   'resolveDefectWindowDays',
   'resolveEnvironmentPorts',
   'resolveEnvironmentProxy',
