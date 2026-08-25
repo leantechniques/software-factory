@@ -191,7 +191,7 @@ export {
 // Checkers
 export type { DesignSmell, DesignSmellVerdict } from './checkers/design-smells.js';
 export { designSmellsChecker } from './checkers/design-smells.js';
-export type { CheckerContext } from './checkers/index.js';
+export type { Checker, CheckerContext, CheckerRunCtx } from './checkers/index.js';
 export {
   accessibilityChecker,
   compileChecker,

@@ -12,6 +12,7 @@ import { StubModelExecutor } from '../router/stub.js';
 import type { Constitution } from '../types/index.js';
 import {
   accessibilityChecker,
+  type Checker,
   type CheckerContext,
   compileChecker,
   fileExists,
@@ -949,6 +950,83 @@ describe('runAllCheckers', () => {
       'design_smells',
     ]);
     expect(stub.calls).toHaveLength(0);
+  });
+
+  it('runs caller-supplied extra checkers after built-ins', { timeout: 60000 }, async () => {
+    const worktree = await makeWorktree();
+    const { router, stub } = makeRouter('{"checker":"custom_x","result":"PASS","details":"ok"}');
+    const extra: Checker = {
+      name: 'lt_gate',
+      run: async () => ({ checker: 'lt_gate', result: 'FAIL', details: 'constitution compliance below floor' }),
+    };
+
+    const summary = await runAllCheckers(makeContext(worktree), router, null, undefined, [extra]);
+
+    expect(summary.total).toBe(8);
+    expect(summary.results.at(-1)?.checker).toBe('lt_gate');
+    expect(summary.results.at(-1)?.result).toBe('FAIL');
+    expect(summary.failures).toBeGreaterThanOrEqual(1);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it(
+    'resolves a constitution-declared name to a matching extra checker instead of failing closed',
+    { timeout: 60000 },
+    async () => {
+      const constitutionDir = await mkdtemp(join(tmpdir(), 'checker-test-constitution-'));
+      tempDirs.add(constitutionDir);
+      await writeFile(
+        join(constitutionDir, 'myproduct.md'),
+        '---\nproduct: myproduct\ncheckers:\n  - lt_gate\n---\nBody standard text\n',
+      );
+      const worktree = await makeWorktree();
+      const { router } = makeRouter('{"checker":"custom_x","result":"PASS","details":"ok"}');
+      const constitution = new ConstitutionLoader(constitutionDir).resolve(worktree, 'myproduct');
+      const extra: Checker = {
+        name: 'lt_gate',
+        run: async () => ({ checker: 'lt_gate', result: 'PASS', details: 'ok' }),
+      };
+
+      const summary = await runAllCheckers(makeContext(worktree), router, constitution, undefined, [extra]);
+
+      const gate = summary.results.find((r) => r.checker === 'lt_gate');
+      expect(gate?.result).toBe('PASS');
+      expect(gate?.details).toBe('ok');
+      expect(summary.results.filter((r) => r.checker === 'lt_gate')).toHaveLength(1);
+    },
+  );
+
+  it('does not let an extra checker shadow a built-in', { timeout: 60000 }, async () => {
+    const worktree = await makeWorktree();
+    const { router } = makeRouter('{"checker":"custom_x","result":"PASS","details":"ok"}');
+    const impostor: Checker = {
+      name: 'tests',
+      run: async () => ({ checker: 'tests', result: 'PASS', details: 'always green' }),
+    };
+
+    const summary = await runAllCheckers(makeContext(worktree), router, null, undefined, [impostor]);
+
+    expect(summary.total).toBe(7);
+    const tests = summary.results.find((r) => r.checker === 'tests');
+    expect(tests?.result).toBe('SKIP'); // the built-in ran, not the impostor
+    expect(tests?.details).not.toBe('always green');
+  });
+
+  it('fails closed when an extra checker crashes', { timeout: 60000 }, async () => {
+    const worktree = await makeWorktree();
+    const { router } = makeRouter('{"checker":"custom_x","result":"PASS","details":"ok"}');
+    const crasher: Checker = {
+      name: 'lt_gate',
+      run: async () => {
+        throw new Error('gate subprocess exploded');
+      },
+    };
+
+    const summary = await runAllCheckers(makeContext(worktree), router, null, undefined, [crasher]);
+
+    const gate = summary.results.find((r) => r.checker === 'lt_gate');
+    expect(gate?.result).toBe('FAIL');
+    expect(gate?.details).toContain('gate subprocess exploded');
   });
 
   it(

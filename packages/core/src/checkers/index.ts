@@ -443,10 +443,18 @@ function unknownCheckerOutput(name: string): CheckerOutput {
   };
 }
 
-/** Built-ins first (current order), then constitution checkers not already registered, in constitution order. */
-function buildCheckers(constitution: Constitution | null): Checker[] {
+/** Built-ins first (current order), then caller-supplied extras, then constitution
+ *  checkers not already registered, in constitution order. Extras cannot shadow a
+ *  built-in (first registration wins), and a constitution-declared name that an
+ *  extra already satisfies resolves to the extra instead of failing closed. */
+function buildCheckers(constitution: Constitution | null, extraCheckers: readonly Checker[] = []): Checker[] {
   const checkers = new Map<string, Checker>();
   for (const checker of BUILT_IN_CHECKERS) checkers.set(checker.name, checker);
+
+  for (const checker of extraCheckers) {
+    if (checkers.has(checker.name)) continue;
+    checkers.set(checker.name, checker);
+  }
 
   for (const name of constitution?.checkers ?? []) {
     if (checkers.has(name)) continue;
@@ -466,6 +474,7 @@ export async function runAllCheckers(
   router: ModelRouter,
   constitution: Constitution | null,
   customCheckerTimeoutSeconds?: number,
+  extraCheckers?: readonly Checker[],
 ): Promise<CheckSummary> {
   const probe = ctx.probe ?? (await (ctx.probeWorktree ?? probeWorktree)(ctx.worktree));
 
@@ -481,7 +490,7 @@ export async function runAllCheckers(
   };
 
   const results: CheckerOutput[] = [];
-  for (const checker of buildCheckers(constitution)) {
+  for (const checker of buildCheckers(constitution, extraCheckers ?? [])) {
     let output: CheckerOutput;
     try {
       output = await checker.run(runCtx);

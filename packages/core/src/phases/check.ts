@@ -1,7 +1,13 @@
 // src/phases/check.ts — CHECK phase: independent checkers verify output, rework loop
 
 import { type LifecycleBus, withLifecycle } from '../bus/index.js';
-import { type CheckerContext, probeWorktree, runAllCheckers, type WorktreeProbe } from '../checkers/index.js';
+import {
+  type Checker,
+  type CheckerContext,
+  probeWorktree,
+  runAllCheckers,
+  type WorktreeProbe,
+} from '../checkers/index.js';
 import { buildConstitutionContext } from '../constitutions/index.js';
 import { laneEnv } from '../environment/index.js';
 import type { EventKind } from '../events/kinds.js';
@@ -168,6 +174,9 @@ async function checkPhaseImpl(opts: {
   laneId?: string;
   /** Lifecycle bus to emit onto; defaults to the process-wide `lifecycleBus` (#591). */
   bus?: LifecycleBus;
+  /** Caller-supplied checkers appended to the registry (built-ins first, extras
+   *  cannot shadow a built-in). Runs on the initial pass and every rework round. */
+  extraCheckers?: readonly Checker[];
 }): Promise<CheckPhaseResult> {
   const {
     issue,
@@ -188,6 +197,7 @@ async function checkPhaseImpl(opts: {
     priorFailureSignature,
     reworkRoute,
     reworkModel,
+    extraCheckers,
   } = opts;
 
   let probe = await probeWorktree(worktree);
@@ -213,7 +223,7 @@ async function checkPhaseImpl(opts: {
 
   log('check', 'Running checkers');
 
-  let summary = await runAllCheckers(ctx, router, constitution, checkTimeoutSeconds);
+  let summary = await runAllCheckers(ctx, router, constitution, checkTimeoutSeconds, extraCheckers);
   let reworkRounds = 0;
   const maxRounds = autoRework ? Math.min(maxReworkRounds, MAX_REWORK_ROUNDS) : 0;
 
@@ -290,7 +300,7 @@ async function checkPhaseImpl(opts: {
 
     probe = await probeWorktree(worktree);
     ctx.probe = probe;
-    summary = await runAllCheckers(ctx, router, constitution, checkTimeoutSeconds);
+    summary = await runAllCheckers(ctx, router, constitution, checkTimeoutSeconds, extraCheckers);
     log('check', `Rework round ${reworkRounds}: ${summary.failures} failures remaining`);
     // When no model ran this round (modelCompleted === false), an unchanged failure
     // signature is not evidence of a stuck worker — leave the streak untouched
