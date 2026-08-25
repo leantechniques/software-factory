@@ -102,6 +102,7 @@ import {
   renderKpiTrend,
   resolveAutoFailover,
   resolveCodexDisabled,
+  resolveConstitutionsDir,
   resolveDefectWindowDays,
   resolveEffectiveModelPins,
   resolveEfficiencyPolicy,
@@ -361,6 +362,10 @@ export function scaffoldConstitution(template: string, product: string): string 
 
 export interface InitConstitutionDeps {
   dir?: string;
+  /** Where `_template.md` is read from; defaults to `dir` so a repo-local
+   *  constitutions dir (which carries no template) can still scaffold from
+   *  the packaged one by passing it here explicitly. */
+  templateDir?: string;
   readFile?: (p: string) => string;
   fileExists?: (p: string) => boolean;
   writeFile?: (p: string, data: string) => void;
@@ -370,6 +375,7 @@ export interface InitConstitutionDeps {
 export function initConstitution(product: string, deps: InitConstitutionDeps = {}): string {
   const {
     dir = getConstitutionsDir(),
+    templateDir = dir,
     readFile = (p: string) => readFileSync(p, 'utf-8'),
     fileExists = existsSync,
     writeFile = (p: string, d: string) => writeFileSync(p, d),
@@ -379,17 +385,21 @@ export function initConstitution(product: string, deps: InitConstitutionDeps = {
   if (fileExists(target)) {
     throw new ConstitutionExistsError(`constitution '${product}' already exists at ${target} — nothing changed`);
   }
-  const content = scaffoldConstitution(readFile(resolve(dir, '_template.md')), product);
+  const content = scaffoldConstitution(readFile(resolve(templateDir, '_template.md')), product);
   writeFile(target, content);
   return target;
 }
 
 export async function cmdConstitution(opts: { list?: boolean; product?: string; init?: string }) {
-  const loader = new ConstitutionLoader();
+  // Repo-first: a target repo's .factory/constitutions/ wins when it exists.
+  // Tolerate running outside a git repo (list/init still work on the packaged dir).
+  const repoRoot = await getRepoRoot().catch(() => undefined);
+  const constitutionsDir = resolveConstitutionsDir(repoRoot);
+  const loader = new ConstitutionLoader(constitutionsDir);
 
   if (opts.init) {
     try {
-      const target = initConstitution(opts.init);
+      const target = initConstitution(opts.init, { dir: constitutionsDir, templateDir: getConstitutionsDir() });
       console.log(chalk.green(`Created constitution at ${target}`));
       console.log(
         `Next: edit its Purpose, Standards, and Quality Gates, then run: factory constitution --product ${opts.init}`,
@@ -413,11 +423,13 @@ export async function cmdConstitution(opts: { list?: boolean; product?: string; 
   }
 
   if (opts.product) {
-    const constPath = resolve(getConstitutionsDir(), `${opts.product}.md`);
+    const constPath = resolve(constitutionsDir, `${opts.product}.md`);
     if (!existsSync(constPath)) {
       throw new CliExitError(`No constitution '${opts.product}' found`, 1);
     }
-    const repoRoot = await getRepoRoot();
+    if (repoRoot === undefined) {
+      throw new CliExitError('not inside a git repository — run factory constitution --product from your repo', 1);
+    }
     const paths = getFactoryPaths(repoRoot);
     writeFileSync(paths.product, opts.product);
     console.log(chalk.green(`Active product: ${opts.product}`));
@@ -951,7 +963,7 @@ export async function shipIssue(
   });
   const modelPins = resolveEffectiveModelPins(router.registryRef, repoConfig);
   const codexOff = resolveCodexDisabled(repoConfig);
-  const constitutionLoader = new ConstitutionLoader();
+  const constitutionLoader = new ConstitutionLoader(resolveConstitutionsDir(repoRoot));
 
   const product = opts.product ?? readActiveProduct(paths.product);
   const autoRework = opts.autoRework ?? true;

@@ -22,6 +22,7 @@ export {
   loadModelsConfig,
   loadRoutesConfig,
   resolveAutoFailover,
+  resolveConstitutionsDir,
   resolveDefectWindowDays,
   resolveEnvironmentPorts,
   resolveEnvironmentProxy,
